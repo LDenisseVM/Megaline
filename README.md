@@ -18,17 +18,19 @@ A continuación puedes ver una descripción de las tarifas:
 
 Surf
 
-Pago mensual: 20$.
-500 minutos al mes, 50 SMS y 15 GB de datos.
-Si se exceden los límites del paquete:
-1 minuto: 3 centavos.
-1 SMS: 3 centavos.
-1 GB de datos: 10$.
+* Pago mensual: 20$.
+* 500 minutos al mes, 50 SMS y 15 GB de datos.
+* Si se exceden los límites del paquete:
+* 1 minuto: 3 centavos.
+* 1 SMS: 3 centavos.
+* 1 GB de datos: 10$.
+
+
 Ultimate
 
-Pago mensual: 70$.
-3000 minutos al mes, 1000 SMS y 30 GB de datos.
-Si se exceden los límites del paquete:
-1 minuto: 1 centavo.
-1 SMS: 1 centavo.
-1 GB de datos: 7$.
+* Pago mensual: 70$.
+* 3000 minutos al mes, 1000 SMS y 30 GB de datos.
+* Si se exceden los límites del paquete:
+* 1 minuto: 1 centavo.
+* 1 SMS: 1 centavo.
+* 1 GB de datos: 7$.
