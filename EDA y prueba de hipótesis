@@ -1,0 +1,577 @@
+# ¿Cuál es un mejor plan?
+
+El operador de telecomunicaciones Megaline ofrece a sus clientes dos tarifas de prepago, Surf y Ultimate. El departamento comercial quiere saber cuál de los planes genera más ingresos para poder ajustar el presupuesto de publicidad.
+
+Aqui realizamos un análisis preliminar de las tarifas basado en una selección de clientes relativamente pequeña. Tenemos los datos de 500 clientes de Megaline: quiénes son los clientes, de dónde son, qué tarifa usan, así como la cantidad de llamadas que hicieron y los mensajes de texto que enviaron en 2018. Analizaremos el comportamiento de los clientes y determinaremos qué tarifa de prepago genera más ingresos.
+
+
+# Cargar todas las librerías
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from scipy import stats as st
+import math
+
+## Cargar los datos
+
+# Carga los archivos de datos en diferentes DataFrames
+calls = pd.read_csv('/datasets/megaline_calls.csv')
+internet = pd.read_csv('/datasets/megaline_internet.csv')
+messages = pd.read_csv('/datasets/megaline_messages.csv')
+plans = pd.read_csv('/datasets/megaline_plans.csv')
+users = pd.read_csv('/datasets/megaline_users.csv')
+
+## Preparar los datos
+
+calls.head()
+
+internet.head()
+
+messages.head()
+
+users.head()
+
+# Imprimimos la información general/resumen sobre el DataFrame de los planes
+plans.info()
+
+# Imprimimos una muestra de los datos para los planes
+
+plans.head()
+
+plans['gb_per_month_included']=plans['mb_per_month_included']/1024
+
+plans['gb_per_month_included']=plans['gb_per_month_included'].astype(int)
+
+
+No vemos nada fuera de lo común ni extraño, todo está en su lugar, solo agregamos una columna para tener los Gb de cada plan 
+
+
+
+# Hacemos el mismo análisis y correcciones con los demás DF
+users.info()
+
+users.head()
+
+Hay valores ausentes en "churn_date", pero es porque el servicio aún se estaba utilizando por lo que de momento lo dejaremos asi 
+
+Y cambiaremos el tipo de datos de "reg_date", a un date_time 
+
+users['reg_date']=pd.to_datetime(users['reg_date'], format='%Y-%m-%d')
+
+users.info()
+
+Y comprobamos que se hayan realizado correctamente los datos 
+
+
+
+
+calls.info()
+
+
+calls.head(17)
+
+Hacemos lo mismo con el tipo de dato date_time, y además agregamos una columna redondeando la duración de la llamada 
+
+calls['call_date']=pd.to_datetime(calls['call_date'], format='%Y-%m-%d')
+
+calls['duration']=np.ceil(calls['duration'])
+
+calls['duration']=calls['duration'].astype(int)
+
+calls.head()
+
+calls.info()
+
+ 
+# Enriquececemos los datos
+
+calls['month']=pd.to_datetime(calls['call_date']).dt.month
+calls.head()
+
+Creamos otra columna que contenga el mes 
+
+
+messages.info()
+
+messages.head()
+
+messages['message_date']=pd.to_datetime(messages['message_date'], format='%Y-%m-%d')
+
+messages.info()
+
+Arreglamos el tipo de dato y lo cambiamos a datetime
+
+ 
+messages['month']=pd.to_datetime(messages['message_date']).dt.month
+messages.head()
+
+
+internet.info()
+
+internet.head()
+
+internet['session_date']=pd.to_datetime(internet['session_date'], format='%Y-%m-%d')
+
+internet.info()
+
+También corregimos el tipo de datos, y en el caso de los megabytes no los redondeamos aqui porque al final se suman y se redondean hacia los gigabytes 
+
+
+
+internet['month']=pd.to_datetime(internet['session_date']).dt.month
+internet.head()
+
+
+## Estudiamos las condiciones del plan
+
+
+# Calculamos el número de llamadas hechas por cada usuario por mes.
+data_by_user_calls=calls.groupby(['user_id', 'month'])['id'].count()
+#data_by_user.rename(columns={'id': 'calls'}, inplace=True)
+data_by_user_calls.head()
+
+# Calculamos la cantidad de minutos que usó cada usuario por mes.
+
+data_by_user_minutes=calls.groupby(['user_id', 'month'])['duration'].sum()
+data_by_user_minutes.head()
+
+# Calculamos el número de mensajes enviados por cada usuario por mes. 
+
+data_by_user_messages=messages.groupby(['user_id', 'month'])['id'].count()
+data_by_user_messages=data_by_user_messages.fillna(0).astype(int)
+data_by_user_messages.head()
+
+# Calculamos el volumen del trafico de internet usado por cada usuario por mes.
+
+data_by_user_mb=internet.groupby(['user_id','month'])['mb_used'].sum()
+data_by_user_mb.head()
+
+data_by_user_gb = np.ceil(data_by_user_mb / 1024)
+data_by_user_gb.head()
+
+# Combinamos los datos para las llamadas, minutos, mensajes e internet con base en el user_id y el mes
+data_by_user = pd.merge(data_by_user_calls, data_by_user_minutes, on=['user_id', 'month'], how='outer')
+data_by_user = pd.merge(data_by_user, data_by_user_messages, on=['user_id', 'month'], how='outer')
+data_by_user = pd.merge(data_by_user, data_by_user_mb, on=['user_id', 'month'], how='outer')
+data_by_user = pd.merge(data_by_user, data_by_user_gb, on=['user_id', 'month'], how='outer')
+data_by_user
+
+data_by_user.columns=['calls', 'minutes', 'messages', 'mb', 'gb']
+
+data_by_user.head()
+
+data_by_user
+
+data_by_user=data_by_user.fillna(0)
+
+data_by_user[['calls', 'minutes', 'messages']] = data_by_user[['calls', 'minutes', 'messages']].astype(int, errors='ignore')
+
+data_by_user
+
+data_by_user.info()
+
+data_by_user=data_by_user.reset_index()
+
+data_by_user.head()
+
+data_user= data_by_user.merge(users, on='user_id')
+data_user
+
+data_by_user['user_id'].nunique()
+
+# Añade la información del plan
+
+data_by_user['plan'] = data_user['plan']
+
+data_by_user
+
+data_by_user['messages_pay_extra'] = 0
+
+
+for index, row in data_by_user.iterrows():
+    if row['plan'] == 'ultimate':
+        res = row['messages'] - 1000
+        if res > 0:
+            data_by_user.loc[index, 'messages_pay_extra'] = res * 0.01
+    else:
+        res1 = row['messages'] - 50
+        if res1 > 0:
+            data_by_user.loc[index, 'messages_pay_extra'] = res1 * 0.03
+            
+            
+            
+
+data_by_user.head()
+
+data_by_user['calls_pay_extra'] = 0
+
+
+for index, row in data_by_user.iterrows():
+    if row['plan'] == 'ultimate':
+        res = row['minutes'] - 3000
+        if res > 0:
+            data_by_user.loc[index, 'calls_pay_extra'] = res * 0.01
+    else:
+        res1 = row['minutes'] - 500
+        if res1 > 0:
+            data_by_user.loc[index, 'calls_pay_extra'] = res1 * 0.03
+            
+            
+            
+
+data_by_user.head()
+
+data_by_user['gb_pay_extra'] = 0
+
+
+for index, row in data_by_user.iterrows():
+    if row['plan'] == 'ultimate':
+        res = row['gb'] - 30
+        if res > 0:
+            data_by_user.loc[index, 'gb_pay_extra'] = res * 7
+    else:
+        res1 = row['gb'] - 15
+        if res1 > 0:
+            data_by_user.loc[index, 'gb_pay_extra'] = res1 * 10
+            
+            
+            
+
+data_by_user.head()
+
+data_by_user.info()
+
+data_by_user['gb']=data_by_user['gb'].astype(int)
+
+data_by_user.info()
+
+data_by_user.head(10)
+
+## Estudiamos el comportamiento del usuario
+
+### Llamadas
+
+Creamos una tabla con las llamadas de ultimate, y con ello un gráfico
+
+# Comparamos la duración promedio de llamadas por cada plan por cada mes. Dibujamos una gráfica de barras para visualizarlo.
+
+users_ultimate=users[users['plan']=='ultimate']
+users_ultimate
+
+user_id_ultimate=users_ultimate['user_id']
+user_id_ultimate
+
+calls_ultimate=calls[calls['user_id'].isin(user_id_ultimate)]
+calls_ultimate.head()
+
+calls_ultimate_pivot=calls_ultimate.pivot_table(index='month', values='duration')
+calls_ultimate_pivot.plot(kind='bar').set_title('Duración promedio de llamadas, por mes, del plan ultimate')
+
+Y hacemos lo mismo para los usuarios de surf
+
+users_surf=users[users['plan']=='surf']
+users_surf
+
+user_id_surf=users_surf['user_id']
+user_id_surf
+
+calls_surf=calls[calls['user_id'].isin(user_id_surf)]
+calls_surf.head()
+
+calls_surf_pivot=calls_surf.pivot_table(index='month', values='duration')
+calls_surf_pivot.plot(kind='bar').set_title('Duración promedio de llamadas, por mes, del plan surf')
+
+calls_ultimate_pivot['duration'].plot(kind='bar', alpha=0.4)
+calls_surf_pivot['duration'].plot(kind='bar', alpha=0.4)
+
+
+# Comparamos el número de minutos que los usuarios de cada plan requieren cada mes. Trazamos un histograma.
+
+
+ultimate=data_by_user.query('plan=="ultimate"')
+surf=data_by_user.query('plan=="surf"')
+
+ultimate.head()
+
+minutes_ultimate_pivot=ultimate.pivot_table(index='month', values='minutes')
+minutes_ultimate_pivot
+
+Minutos promedio que los usuarios de cada plan requieren cada mes:
+
+minutes_ultimate_pivot.hist()
+
+minutes_surf_pivot=surf.pivot_table(index='month', values='minutes')
+minutes_surf_pivot.hist()
+
+minutes_ultimate_pivot['minutes'].hist(alpha=0.5)
+minutes_surf_pivot['minutes'].hist(alpha=0.5)
+
+# Calculamos la media y la varianza de la duración mensual de llamadas.
+#Duración media de las llamadas del plan surf por mes:
+calls_surf_pivot
+
+variance_calls_surf = calls_surf.groupby('month')['duration'].agg(np.var)
+variance_calls_surf
+
+#Duración media de las llamadas del plan ultimate por mes:
+calls_ultimate_pivot
+
+variance_calls_ultimate = calls_ultimate.groupby('month')['duration'].var()
+variance_calls_ultimate
+
+# Trazamos un diagrama de caja para visualizar la distribución de la duración mensual de llamadas.
+
+
+calls_surf.boxplot(column='duration', by='month')
+plt.xlabel('Month')
+plt.ylabel('Duration')
+plt.title('Distribución de la duración de llamadas de cada mes, del plan surf')
+
+calls_ultimate.boxplot(column='duration', by='month')
+plt.xlabel('Month')
+plt.ylabel('Duration')
+plt.title('Distribución de la duración de llamadas de cada mes, del plan ultimate')
+
+De ambos planes:
+
+calls.boxplot(column='duration', by='month')
+
+#Los minutos de todo el mes de ambos planes:
+data_by_user.boxplot(column='minutes', by='month')
+
+#Duración de las llamdas total de todo el mes del plan ultimate
+ultimate.boxplot(column='minutes', by='month')
+
+#Duración de las llamdas total de todo el mes del plan surf
+surf.boxplot(column='minutes', by='month')
+
+El comportamiento con las llamadas entre planes es muy similar, por ejemplo aumenta la cantidad de minutos en determinado mes para ambos planes 
+
+
+### Mensajes
+
+messages_ultimate_pivot=ultimate.pivot_table(index='month', values='messages').astype('int')
+messages_ultimate_pivot
+
+messages_surf_pivot=surf.pivot_table(index='month', values='messages').astype('int')
+messages_surf_pivot
+
+messages_ultimate_pivot.plot(kind='bar')
+
+messages_surf_pivot.plot(kind='bar')
+
+messages_surf_pivot['messages'].plot(kind='bar', alpha=0.4)
+messages_ultimate_pivot['messages'].plot(kind='bar', alpha=0.4)
+
+messages_surf_pivot['messages'].hist(alpha=0.4)
+messages_ultimate_pivot['messages'].hist(alpha=0.4)
+
+#media de mensajes por usurio por mes del plan surf
+messages_surf_pivot
+
+#media de menssjes por usurio por mes del plan ultimate
+messages_ultimate_pivot
+
+ultimate.groupby('month')['messages'].var()
+
+surf.groupby('month')['messages'].var()
+
+ultimate.boxplot(column='messages', by='month')
+plt.xlabel('Month')
+plt.ylabel('Messages')
+plt.title('Distribución de los mensajes por mes, del plan ultimate')
+
+surf.boxplot(column='messages', by='month')
+plt.xlabel('Month')
+plt.ylabel('Messages')
+plt.title('Distribución de los mensajes por mes, del plan surf')
+
+# Comparmosa la cantidad de tráfico de internet consumido por usuarios por plan
+
+
+
+### Internet
+
+internet_ultimate_pivot=ultimate.pivot_table(index='month', values=['mb', 'gb'], aggfunc=['median', 'mean'])
+internet_ultimate_pivot
+
+internet_surf_pivot=surf.pivot_table(index='month', values=['mb', 'gb'], aggfunc=['median', 'mean'])
+internet_surf_pivot
+
+internet_ultimate_pivot.columns
+
+#Media y mediana de gigabytes usados por mes del plan ultimate
+internet_ultimate_pivot[[('median', 'gb'), (  'mean', 'gb')]].plot(kind='bar')
+
+##Media y mediana de megabytes usados por mes del plan ultimate
+internet_ultimate_pivot[[('median', 'mb'), (  'mean', 'mb')]].plot(kind='bar')
+
+#Media y mediana de gigabytes usados por mes del plan surf
+internet_surf_pivot[[('median', 'gb'), (  'mean', 'gb')]].plot(kind='bar')
+
+#Media y mediana de megabytes usados por mes del plan surf
+internet_surf_pivot[[('median', 'mb'), (  'mean', 'mb')]].plot(kind='bar')
+
+
+
+#Aqui comparamos las medias de gb de los planes 
+internet_surf_pivot[(  'mean', 'gb')].plot(kind='bar', alpha=0.4)
+internet_ultimate_pivot[(  'mean', 'gb')].plot(kind='bar', alpha=0.4)
+
+#Aqui comparamos las medianas de gb de los planes 
+internet_surf_pivot[(  'median', 'gb')].plot(kind='bar', alpha=0.4)
+internet_ultimate_pivot[(  'median', 'gb')].plot(kind='bar', alpha=0.4)
+
+#Comparamos las medianas de gb de ambos planes 
+internet_surf_pivot[('median', 'gb')].hist(alpha=0.4)
+internet_ultimate_pivot[('median', 'gb')].hist(alpha=0.4)
+
+#media y mediana de internet por usurio por mes del plan surf
+internet_surf_pivot
+
+#media y mediana de internet por usurio por mes del plan ultimate
+internet_ultimate_pivot
+
+ultimate.groupby('month')['gb'].var()
+
+ultimate.groupby('month')['mb'].var()
+
+surf.groupby('month')['gb'].var()
+
+surf.groupby('month')['mb'].var()
+
+ultimate.boxplot(column='gb', by='month')
+plt.xlabel('Month')
+plt.ylabel('Gigabytes')
+plt.title('Distribución de los gigabytes por mes, del plan ultimate')
+
+ultimate.boxplot(column='mb', by='month')
+plt.xlabel('Month')
+plt.ylabel('Megabytes')
+plt.title('Distribución de los Megabytes por mes, del plan ultimate')
+
+surf.boxplot(column='gb', by='month')
+plt.xlabel('Month')
+plt.ylabel('Gigabytes')
+plt.title('Distribución de los gigabytes por mes, del plan surf')
+
+ultimate.boxplot(column='mb', by='month')
+plt.xlabel('Month')
+plt.ylabel('Megabytes')
+plt.title('Distribución de los Megabytes por mes, del plan surf')
+
+El comportamiento en cuanto a uso del internet de los usuarios entre planes es irregular, a diferencia de los mensajes, si se ve una diferencia más marcada 
+
+ 
+
+## Ingreso
+
+data_by_user
+
+ultimate.loc[:, 'price_plan'] = 70
+
+ultimate
+
+surf.loc[:, 'price_plan'] = 30
+
+surf
+
+surf['total_pay'] = surf['messages_pay_extra'] + surf['calls_pay_extra'] + surf['gb_pay_extra'] + surf['price_plan']
+
+
+surf
+
+total_pay_surf=sum(surf['total_pay'])
+total_pay_surf
+
+
+
+ultimate['total_pay'] = ultimate['messages_pay_extra'] + ultimate['calls_pay_extra'] + ultimate['gb_pay_extra'] + ultimate['price_plan']
+
+
+ultimate
+
+total_pay_ultimate=sum(ultimate['total_pay'])
+total_pay_ultimate
+
+surf['total_pay'].mean()
+
+ultimate['total_pay'].mean()
+
+surf['user_id'].nunique()
+
+ultimate['user_id'].nunique()
+
+surf['gb'].sum()
+
+ultimate['gb'].sum()
+
+surf['gb'].mean()
+
+ultimate['gb'].mean()
+
+ultimate['total_pay'].var()
+
+surf['total_pay'].var()
+
+Aunque la media de pago del plan surf es un poco menor, hay muchos mas clientes en ese plan, asi que la compañia recibe más ingresos de ese plan que de ultimate, y eso lo muestra las variable total_pay_ultimate, y total_pay_surf; además de que la compañia gasta menos gb en promedio por usuario con el plan surf 
+
+ 
+
+## Probar las hipótesis estadísticas.
+
+Hipótesis nula: el ingreso promedio de ambos planes es igual
+    
+Hipótesis alterna: el ingreso promedio de los planes es diferente 
+
+# Prueba de las hipótesis
+
+alpha=.05
+results=st.ttest_ind(ultimate['total_pay'], surf['total_pay'])
+print(results.pvalue)
+if results.pvalue<alpha:
+    print('Rechazamos la hipótessis nula')
+else:
+    print('No rechazamos la hipótesis nula')
+
+Con este tipo de test no podemos asegurar que es ingreso promedio de los planes es igual, pero el alto resultado que obtenemos nos da lugar a pensar que es una opción probable 
+
+data=pd.concat([ultimate, surf], axis=0)
+data
+
+NY_NJ_users=users[users['city'].str.contains('NY-NJ', case=False)]
+
+NY_NJ_users
+
+NY_NJ_users1=NY_NJ_users['user_id']
+
+NY_NJ=data[data['user_id'].isin(NY_NJ_users1)]
+NY_NJ
+
+rest = data[~data['user_id'].isin(NY_NJ_users1)]
+rest
+
+Hipótesis nula: el ingreso promedio de ambas regiones es igual
+
+Hipótesis alterna: el ingreso promedio de el área NY-NJ es distinto al resto 
+
+# Prueba las hipótesis
+
+alpha=.05
+results=st.ttest_ind(NY_NJ['total_pay'], rest['total_pay'])
+print(results.pvalue)
+if results.pvalue<alpha:
+    print('Rechazamos la hipótessis nula')
+else:
+    print('No rechazamos la hipótesis nula')
+
+Con este tipo de test no podemos asegurar que el ingreso promedio de ambas regiones es igual, pero el resultado que obtenemos nos da lugar a pensar que es una opción probable
+
+
+
+## Conclusión general
+
+
+Primero arreglamos algunos tipos de datos de las tablas originales, después agregamos los datos por usuario por periodo para poder tener solo un registro por usuario por periodo, y creamos el dataframe data_by_user, que contiene práctcamente toda la información necesaria para nuestro análisis
+Después sacamos algunas gráficas por periodo para comparar el comportamiento de los usuarios, y algunas medidas estadísticas como la varianza
+Finalmente comprobamos dos hipótesis sobre el que tan diferentes son el ingreso entre planes, y entre distintas regiones
